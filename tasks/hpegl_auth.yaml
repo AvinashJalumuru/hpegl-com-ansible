@@ -1,0 +1,22 @@
+---
+- name: Pre-requisites for mounting iso
+  ansible.builtin.assert:
+    that:
+      - hpegl_client_id is defined and hpegl_client_id != ''
+      - hpegl_client_secret is defined and hpegl_client_secret != ''
+
+- name: Authenticate to HPE GreenLake
+  ansible.builtin.uri:
+    url: "{{ hpegl_sso_url }}"
+    method: POST
+    body:
+      grant_type: 'client_credentials'
+      client_id: "{{ hpegl_client_id }}"
+      client_secret: "{{ hpegl_client_secret }}"
+    body_format: form-urlencoded
+    return_content: true
+  register: rg_auth_response
+
+- name: Set authentication token
+  ansible.builtin.set_fact:
+    hpegl_auth_token: "{{ rg_auth_response.json.access_token }}"
