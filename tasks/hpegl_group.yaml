@@ -1,7 +1,7 @@
 ---
 - name: Check group is present in the region
   ansible.builtin.uri:
-    url: "{{ hpegl_com_region_url }}/v1/groups?filter=name%20eq%20%27{{ hpegl_group }}%27"
+    url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups?filter=name%20eq%20%27{{ hpegl_group }}%27"
     method: GET
     headers:
       Authorization: "Bearer {{ hpegl_auth_token }}"
@@ -23,6 +23,7 @@
 - name: Set group ID
   ansible.builtin.set_fact:
     hpegl_group_id: "{{ rg_group_check.json['items'][0]['id'] }}"
+    hpegl_group_setting_uris: "{{ rg_group_check.json['items'][0]['settingsUris'] }}"
 
 - name: Print group id
   ansible.builtin.debug:

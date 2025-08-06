@@ -11,9 +11,7 @@
     # AUTHENTICATION
     - name: Authenticate to HPE Greenlake
       ansible.builtin.include_tasks: tasks/hpegl_auth.yaml
-      when:
-        - hpegl_auth_token is not defined
-        - force_auth is defined and force_auth
+      when: hpegl_auth_token is not defined or (force_auth is defined and force_auth)
 
     - name: Pre-requisites for mounting iso
       ansible.builtin.assert:
@@ -27,7 +25,7 @@
 
     - name: Set Compute Ops Url based on region
       ansible.builtin.set_fact:
-        hpegl_com_region_url: "{{ hpegl_regions[hpegl_region] }}/compute-ops-mgmt"
+        hpegl_com_region_url: "{{ hpegl_regions[hpegl_region] }}"
 
     # Compute Ops Group
     - name: Get Group info
@@ -37,14 +35,21 @@
       ansible.builtin.assert:
         that:
           - hpegl_group_id is defined and hpegl_group_id != ''
+          - hpegl_group_setting_uris is defined and hpegl_group_setting_uris | length > 0
 
-    # Compute Ops Servers in group
+    # Compute Ops - Update group image
+    # TODO: Create OS settings if not present in group
+    - name: Patch iso image to group settings
+      ansible.builtin.include_tasks: tasks/hpegl_group_os_settings.yaml
+
+    # Compute Ops - Find servers in group
     - name: Get all devices in a group
       ansible.builtin.uri:
-        url: "{{ hpegl_com_region_url }}/v1/groups/{{ hpegl_group_id }}/devices"
+        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups/{{ hpegl_group_id }}/devices"
         method: GET
         headers:
           Authorization: "Bearer {{ hpegl_auth_token }}"
+          Content-Type: "application/json"
         return_content: true
       register: rg_server_list
 
@@ -55,20 +60,26 @@
 
     - name: Get map of serial numbers with server ids
       ansible.builtin.set_fact:
-        hpegl_user_server_map: "{{ hpegl_user_server_map | default({})| combine({item.serial: item.id}) }}"
+        hpegl_user_server_map: "{{ hpegl_user_server_map | default({}) | combine({item.serial: item.id}) }}"
       when: item.serial in server_serial_list
       loop: "{{ rg_server_list.json['items'] }}"
 
-    - debug: var=hpegl_user_server_map
+    - name: Display the server map identified through serial numbers
+      ansible.builtin.debug:
+        msg: "{{ hpegl_user_server_map }}"
+      when: enable_debug is defined and enable_debug
 
-    - debug:
-        msg: "{{ hpegl_user_server_map.values() | list }}"
+    - name: Fail if all the servers are not found
+      ansible.builtin.assert:
+        that:
+          - hpegl_user_server_map is defined
+          - hpegl_user_server_map.keys() | length == server_serial_list | length
+        fail_msg: "Unable to find all the matching servers in the ComputeOps Group"
 
-    # TODO: Template 
-    # Launch job
+    # Launch OS installation
     - name: Initiate OS deployment on servers in group
       ansible.builtin.uri:
-        url: "{{ hpegl_com_region_url }}/v1/jobs"
+        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/jobs"
         method: POST
         headers:
           Authorization: "Bearer {{ hpegl_auth_token }}"
@@ -85,5 +96,7 @@
         return_content: true
         status_code: [200, 201, 202]
       register: rg_os_install_list
-
-    - debug: var=rg_os_install_list
+    
+    - name: Print the status of OS installation
+      ansible.builtin.debug:
+        msg: "{{ rg_os_install_list }}"

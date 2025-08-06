@@ -21,3 +21,7 @@ Input Parameters used by the ansible playbook.
 - `hpegl_settings_id`: (string) Identifier for the HPE GreenLake settings to be applied.
 
 These parameters are required for configuring and running the Ansible playbook to interact with HPE GreenLake resources.
+
+### Recommendations
+1. Use Compute Ops Groups for each openshift cluster in a region
+2. Create separate OS settings configuration for each cluster
