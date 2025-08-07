@@ -6,13 +6,13 @@
       ansible.builtin.assert:
         that:
           - hpegl_auth_token is defined and hpegl_auth_token != ''
-          - hpegl_group_id is defined and hpegl_group != ''
+          - hpegl_group_id is defined and hpegl_group_id != ''
           - hpegl_os_setting_uri is defined and hpegl_os_setting_uri != ''
 
     # Compute Ops Group
     - name: Patch with new OS image
       ansible.builtin.uri:
-        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups/{{ group_id }}"
+        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups/{{ hpegl_group_id }}"
         method: PATCH
         headers:
           Authorization: "Bearer {{ hpegl_auth_token }}"
