@@ -1,13 +1,12 @@
-- name: Mount ISO to Servers
+- name: Get Compute Ops Server entries
   hosts: localhost
   gather_facts: false
   tasks:
-    - name: Pre-requisites for mounting iso
+    - name: Pre-requisites for fetching COM entries
       ansible.builtin.assert:
         that:
           - hpegl_auth_token is defined and hpegl_auth_token != ''
           - hpegl_group_id is defined and hpegl_group_id != ''
-          - server_serial_list is defined and server_serial_list | length > 0
 
     # Compute Ops - Update group image
     # TODO: Create OS settings if not present in group
@@ -27,26 +26,39 @@
         msg: "{{ rg_server_list }}"
       when: enable_debug is defined and enable_debug
 
-    - name: Get map of serial numbers with server ids
+    - name: Gather server details if user serial numbers are provided
+      when: server_serial_list is defined and server_serial_list | length > 0
+      block:
+        - name: Get map of serial numbers with server ids
+          ansible.builtin.set_fact:
+            hpegl_user_server_map: "{{ hpegl_user_server_map | default({}) | combine({item.serial: item.id}) }}"
+          when: item.serial in server_serial_list
+          loop: "{{ rg_server_list.json['items'] }}"
+
+        - name: Display the server map identified through serial numbers
+          ansible.builtin.debug:
+            msg: "{{ hpegl_user_server_map }}"
+          when: enable_debug is defined and enable_debug
+
+        - name: Fail if all the servers are not found
+          ansible.builtin.assert:
+            that:
+              - hpegl_user_server_map is defined
+              - hpegl_user_server_map.keys() | length == server_serial_list | length
+            fail_msg: "Unable to find all the matching servers in the ComputeOps Group"
+
+        - name: Set Server Ids
+          ansible.builtin.set_fact:
+            hpegl_server_ids: "{{ hpegl_user_server_map.values() | list }}"
+
+
+    - name: Get all server ids if user inputs are not provided
+      when: hpegl_server_ids is not defined or hpegl_server_ids | length == 0
       ansible.builtin.set_fact:
-        hpegl_user_server_map: "{{ hpegl_user_server_map | default({}) | combine({item.serial: item.id}) }}"
-      when: item.serial in server_serial_list
-      loop: "{{ rg_server_list.json['items'] }}"
-
-    - name: Display the server map identified through serial numbers
-      ansible.builtin.debug:
-        msg: "{{ hpegl_user_server_map }}"
-      when: enable_debug is defined and enable_debug
-
-    - name: Fail if all the servers are not found
-      ansible.builtin.assert:
-        that:
-          - hpegl_user_server_map is defined
-          - hpegl_user_server_map.keys() | length == server_serial_list | length
-        fail_msg: "Unable to find all the matching servers in the ComputeOps Group"
+        hpegl_server_ids: "{{ rg_server_list.json['items'] | map(attribute='id') | list }}"
 
     - name: Set device map to stats
       ansible.builtin.set_stats:
         data:
-          hpegl_server_map: "{{ hpegl_user_server_map }}"
-          hpegl_server_ids: "{{ hpegl_user_server_map.values() | list }}"
+          hpegl_server_map: "{{ hpegl_user_server_map | default(omit) }}"
+          hpegl_server_ids: "{{ hpegl_server_ids }}"
