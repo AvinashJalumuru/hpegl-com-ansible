@@ -22,7 +22,7 @@
             "resourceType": "compute-ops/group",
             "resourceId": "{{ hpegl_group_id }}",
             "jobParams": {
-              "devices": "{{ hpegl_server_ids }}",
+              "devices": {{ hpegl_server_ids }},
               "parallel": "{{ parallel_os_install | default(true) }}",
               "stopOnFailure": "{{ stop_on_failure | default(false) }}",
               "osCompletionTimeoutMin": {{ wait_mins_for_os | default(60) | int }}
