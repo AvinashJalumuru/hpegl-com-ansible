@@ -1,0 +1,13 @@
+- name: Assign variables
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Check pre-reqs
+      ansible.builtin.assert:
+        that:
+          - lhs_var is defined
+          - rhs_var is defined
+
+    - name: Assign variables to stats
+      ansible.builtin.set_stats:
+        "{{ lhs_var }}": "{{ vars[rhs_var] }}"
