@@ -1,4 +1,4 @@
-- name: Mount ISO to Servers
+- name: Run OS job
   hosts: localhost
   gather_facts: false
   tasks:
@@ -29,7 +29,7 @@
             parallel: "{{ parallel_os_install | default(true) }}"
             stopOnFailure: "{{ stop_on_failure | default(false) }}"
             # minimum wait time in COM is 60 minutes
-            osCompletionTimeoutMin: "{{ wait_mins_for_os | default(60) }}"
+            osCompletionTimeoutMin: "{{ wait_mins_for_os | default(60) | int }}"
         body_format: json
         return_content: true
         status_code: [200, 201, 202]
