@@ -1,0 +1,52 @@
+- name: Mount ISO to Servers
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Pre-requisites for mounting iso
+      ansible.builtin.assert:
+        that:
+          - hpegl_auth_token is defined and hpegl_auth_token != ''
+          - hpegl_group_id is defined and hpegl_group_id != ''
+          - server_serial_list is defined and server_serial_list | length > 0
+
+    # Compute Ops - Update group image
+    # TODO: Create OS settings if not present in group
+    # Compute Ops - Find servers in group matching to user input serial numbers
+    - name: Get all devices in a group
+      ansible.builtin.uri:
+        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups/{{ hpegl_group_id }}/devices"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ hpegl_auth_token }}"
+          Content-Type: "application/json"
+        return_content: true
+      register: rg_server_list
+
+    - name: Print the servers in a group
+      ansible.builtin.debug:
+        msg: "{{ rg_server_list }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Get map of serial numbers with server ids
+      ansible.builtin.set_fact:
+        hpegl_user_server_map: "{{ hpegl_user_server_map | default({}) | combine({item.serial: item.id}) }}"
+      when: item.serial in server_serial_list
+      loop: "{{ rg_server_list.json['items'] }}"
+
+    - name: Display the server map identified through serial numbers
+      ansible.builtin.debug:
+        msg: "{{ hpegl_user_server_map }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Fail if all the servers are not found
+      ansible.builtin.assert:
+        that:
+          - hpegl_user_server_map is defined
+          - hpegl_user_server_map.keys() | length == server_serial_list | length
+        fail_msg: "Unable to find all the matching servers in the ComputeOps Group"
+
+    - name: Set device map to stats
+      ansible.builtin.set_stats:
+        data:
+          hpegl_server_map: "{{ hpegl_user_server_map }}"
+          hpegl_server_ids: "{{ hpegl_user_server_map.values() | list }}"

@@ -1,0 +1,29 @@
+- name: Create ComputeOps settings
+  hosts: localhost
+  gather_facts: false
+  vars:
+    hpegl_regions:
+      'us-west': "https://us-west.api.greenlake.hpe.com"
+      'eu-central': "https://eu-central.api.greenlake.hpe.com"
+      'ap-northeast': "https://ap-northeast.api.greenlake.hpe.com"
+    hpegl_sso_url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
+  tasks:
+    # AUTHENTICATION
+    - name: Authenticate to HPE Greenlake
+      ansible.builtin.include_tasks: tasks/hpegl_auth.yaml
+      when: hpegl_auth_token is not defined or (force_auth is defined and force_auth)
+
+    - name: Pre-requisites for mounting iso
+      ansible.builtin.assert:
+        that:
+          - hpegl_auth_token is defined and hpegl_auth_token != ''
+          - hpegl_region is defined and hpegl_region != '' and hpegl_region in hpegl_regions
+          - iso_local_image_path is defined and iso_local_image_path != ''
+
+    - name: Set Compute Ops Url based on region
+      ansible.builtin.set_fact:
+        hpegl_com_region_url: "{{ hpegl_regions[hpegl_region] }}"
+      when: hpegl_com_region_url is not defined
+
+    - name: Create settings if not present
+      ansible.builtin.include_tasks: tasks/hpegl_create_os_settings.yaml

@@ -1,81 +1,16 @@
 - name: Mount ISO to Servers
   hosts: localhost
   gather_facts: false
-  vars:
-    hpegl_regions:
-      'us-west': "https://us-west.api.greenlake.hpe.com"
-      'eu-central': "https://eu-central.api.greenlake.hpe.com"
-      'ap-northeast': "https://ap-northeast.api.greenlake.hpe.com"
-    hpegl_sso_url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
   tasks:
-    # AUTHENTICATION
-    - name: Authenticate to HPE Greenlake
-      ansible.builtin.include_tasks: tasks/hpegl_auth.yaml
-      when: hpegl_auth_token is not defined or (force_auth is defined and force_auth)
-
     - name: Pre-requisites for mounting iso
       ansible.builtin.assert:
         that:
           - hpegl_auth_token is defined and hpegl_auth_token != ''
-          - hpegl_group is defined and hpegl_group != ''
-          - hpegl_region is defined and hpegl_region != '' and hpegl_region in hpegl_regions
-          - server_serial_list is defined and server_serial_list | length > 0
-          - iso_local_image_path is defined and iso_local_image_path != ''
-          - hpegl_com_os_job_template is defined and hpegl_com_os_job_template != ''
-
-    - name: Set Compute Ops Url based on region
-      ansible.builtin.set_fact:
-        hpegl_com_region_url: "{{ hpegl_regions[hpegl_region] }}"
-
-    # Compute Ops Group
-    - name: Get Group info
-      ansible.builtin.include_tasks: tasks/hpegl_group.yaml
-
-    - name: Fail if group id is not present
-      ansible.builtin.assert:
-        that:
           - hpegl_group_id is defined and hpegl_group_id != ''
-          - hpegl_group_setting_uris is defined and hpegl_group_setting_uris | length > 0
+          - hpegl_server_ids is defined and hpegl_server_ids|list > 0
 
     # Compute Ops - Update group image
     # TODO: Create OS settings if not present in group
-    - name: Patch iso image to group settings
-      ansible.builtin.include_tasks: tasks/hpegl_group_os_settings.yaml
-
-    # Compute Ops - Find servers in group
-    - name: Get all devices in a group
-      ansible.builtin.uri:
-        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups/{{ hpegl_group_id }}/devices"
-        method: GET
-        headers:
-          Authorization: "Bearer {{ hpegl_auth_token }}"
-          Content-Type: "application/json"
-        return_content: true
-      register: rg_server_list
-
-    - name: Print the servers in a group
-      ansible.builtin.debug:
-        msg: "{{ rg_server_list }}"
-      when: enable_debug is defined and enable_debug
-
-    - name: Get map of serial numbers with server ids
-      ansible.builtin.set_fact:
-        hpegl_user_server_map: "{{ hpegl_user_server_map | default({}) | combine({item.serial: item.id}) }}"
-      when: item.serial in server_serial_list
-      loop: "{{ rg_server_list.json['items'] }}"
-
-    - name: Display the server map identified through serial numbers
-      ansible.builtin.debug:
-        msg: "{{ hpegl_user_server_map }}"
-      when: enable_debug is defined and enable_debug
-
-    - name: Fail if all the servers are not found
-      ansible.builtin.assert:
-        that:
-          - hpegl_user_server_map is defined
-          - hpegl_user_server_map.keys() | length == server_serial_list | length
-        fail_msg: "Unable to find all the matching servers in the ComputeOps Group"
-
     # Launch OS installation
     - name: Initiate OS deployment on servers in group
       ansible.builtin.uri:
@@ -84,19 +19,22 @@
         headers:
           Authorization: "Bearer {{ hpegl_auth_token }}"
         body:
+          # This template Id is for COM OS deployment
+          # https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops-mgmt/public/openapi/compute-ops-mgmt-latest/operation/create_v1_job/
           jobTemplate: "e2952628-2629-4088-93db-91742304ef0c"
           resourceType: "compute-ops/group"
           resourceId: "{{ hpegl_group_id }}"
           jobParams:
-            devices: "{{ hpegl_user_server_map.values() | list }}"
-            parallel: true
-            stopOnFailure: false
-            osCompletionTimeoutMin: 60
+            devices: "{{ hpegl_server_ids }}"
+            parallel: "{{ parallel_os_install | default(true) }}"
+            stopOnFailure: "{{ stop_on_failure | default(false) }}"
+            # minimum wait time in COM is 60 minutes
+            osCompletionTimeoutMin: "{{ wait_mins_for_os | default(60) }}"
         body_format: json
         return_content: true
         status_code: [200, 201, 202]
       register: rg_os_install_list
-    
+
     - name: Print the status of OS installation
       ansible.builtin.debug:
         msg: "{{ rg_os_install_list }}"

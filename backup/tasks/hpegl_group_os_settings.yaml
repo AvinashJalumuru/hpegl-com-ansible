@@ -62,4 +62,4 @@
 
 - name: Wait to sync Compute Ops operations
   ansible.builtin.pause:
-    seconds: 10
+    seconds: "{{ wait_for_hpecom_sync | default(5) }}"

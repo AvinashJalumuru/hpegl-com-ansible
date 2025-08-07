@@ -1,0 +1,16 @@
+- name: Check for status of the openshift cluster
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    # TODO: Try alternate options instead of dashboard checking
+    # Make sure dashboard is accessible and no proxy stops from accessing
+    - name: Check accessibilty of openshift cluster dashboard
+      ansible.builtin.uri:
+        url: "{{ openshift_dashboard_url }}"
+        method: HEAD
+        return_content: false
+        status_code: 200
+      register: rg_openshift_url
+      retries: 50
+      delay: 20
+      until: rg_openshift_url.status == 200

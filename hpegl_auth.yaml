@@ -1,0 +1,39 @@
+- name: Authentication to COM
+  hosts: localhost
+  gather_facts: false
+  vars:
+    hpegl_regions:
+      'us-west': "https://us-west.api.greenlake.hpe.com"
+      'eu-central': "https://eu-central.api.greenlake.hpe.com"
+      'ap-northeast': "https://ap-northeast.api.greenlake.hpe.com"
+    hpegl_sso_url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
+  tasks:
+    - name: Pre-requisites for mounting iso
+      ansible.builtin.assert:
+        that:
+          - hpegl_client_id is defined and hpegl_client_id != ''
+          - hpegl_client_secret is defined and hpegl_client_secret != ''
+          - hpegl_region is defined and hpegl_region != '' and hpegl_region in hpegl_regions
+
+    - name: Authenticate to HPE GreenLake
+      ansible.builtin.uri:
+        url: "{{ hpegl_sso_url }}"
+        method: POST
+        body:
+          grant_type: 'client_credentials'
+          client_id: "{{ hpegl_client_id }}"
+          client_secret: "{{ hpegl_client_secret }}"
+        body_format: form-urlencoded
+        return_content: true
+      register: rg_auth_response
+
+    - name: Display auth output
+      ansible.builtin.debug:
+        msg: "{{ rg_auth_response }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Set stats of HPE Greenlake
+      ansible.builtin.set_stats:
+        data:
+          hpegl_com_region_url: "{{ hpegl_regions[hpegl_region] }}"
+          hpegl_auth_token: "{{ rg_auth_response.json.access_token }}"

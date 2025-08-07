@@ -1,0 +1,52 @@
+- name: Add settings to group
+  hosts: localhost
+  gather_facts: false
+  vars:
+    hpegl_regions:
+      'us-west': "https://us-west.api.greenlake.hpe.com"
+      'eu-central': "https://eu-central.api.greenlake.hpe.com"
+      'ap-northeast': "https://ap-northeast.api.greenlake.hpe.com"
+    hpegl_sso_url: "https://sso.common.cloud.hpe.com/as/token.oauth2"
+  tasks:
+    # AUTHENTICATION
+    - name: Authenticate to HPE Greenlake
+      ansible.builtin.include_tasks: tasks/hpegl_auth.yaml
+      when: hpegl_auth_token is not defined or (force_auth is defined and force_auth)
+
+    - name: Pre-requisites for mounting iso
+      ansible.builtin.assert:
+        that:
+          - hpegl_auth_token is defined and hpegl_auth_token != ''
+          - hpegl_group_id is defined and hpegl_group != ''
+          - hpegl_region is defined and hpegl_region != '' and hpegl_region in hpegl_regions
+          - hpegl_os_setting_uri is defined and hpegl_os_setting_uri != ''
+
+    - name: Set Compute Ops Url based on region
+      ansible.builtin.set_fact:
+        hpegl_com_region_url: "{{ hpegl_regions[hpegl_region] }}"
+      when: hpegl_com_region_url is not defined
+
+    # Compute Ops Group
+    - name: Patch with new OS image
+      ansible.builtin.uri:
+        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups/{{ group_id }}"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ hpegl_auth_token }}"
+          Content-Type: application/merge-patch+json
+        body:
+          name: "{{ hpegl_group }}"
+          settingsUris: [ "{{ hpegl_os_setting_uri }}" ]
+        body_format: json
+        return_content: true
+        status_code: 200
+      register: rg_patch_group_settings
+
+    - name: Output of patch operation
+      ansible.builtin.debug:
+        msg: "{{ rg_patch_group_settings }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Wait to sync Compute Ops operations
+      ansible.builtin.pause:
+        seconds: "{{ wait_for_hpecom_sync | default(5) }}"

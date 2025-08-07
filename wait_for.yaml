@@ -1,0 +1,13 @@
+- name: Wait Job
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Playbook to pause in minutes
+      ansible.builtin.pause:
+        minutes: "{{ wait_mins | default(15) }}"
+      when: pause_in_mins is defined and pause_in_mins
+
+    - name: Playbook to pause in seconds
+      ansible.builtin.pause:
+        seconds: "{{ wait_seconds | default(15) }}"
+      when: pause_in_mins is not defined or not pause_in_mins

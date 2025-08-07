@@ -1,0 +1,35 @@
+- name: Get Compute Ops Group
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Pre-requisites for Compute Ops settings
+      ansible.builtin.assert:
+        that:
+          - hpegl_auth_token is defined and hpegl_auth_token != ''
+
+    - name: Check group is present in the region
+      ansible.builtin.uri:
+        url: "{{ hpegl_com_region_url }}/compute-ops-mgmt/v1/groups?filter=name%20eq%20%27{{ hpegl_group }}%27"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ hpegl_auth_token }}"
+          Content-Type: "application/json"
+        return_content: true
+        status_code: 200
+      register: rg_group_check
+
+    - name: Print the output of group API
+      ansible.builtin.debug:
+        msg: "{{ rg_group_check }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Fail if group not found
+      ansible.builtin.fail:
+        msg: "Group {{ hpegl_group }} not found in region {{ hpegl_region }} or multiple entries found"
+      when: rg_group_check.json.count != 1
+
+    - name: Set Groups info to stats
+      ansible.builtin.set_stats:
+        data:
+          hpegl_group_id: "{{ rg_group_check.json['items'][0]['id'] }}"
+          hpegl_group_setting_uris: "{{ rg_group_check.json['items'][0]['settingsUris'] }}"

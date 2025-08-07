@@ -1,0 +1,68 @@
+- name: Apply OS image in group settings
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Get all settings in a group
+      ansible.builtin.uri:
+        url: "{{ hpegl_com_region_url }}{{ item }}"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ hpegl_auth_token }}"
+          Content-Type: "application/json"
+        return_content: true
+        status_code: 200
+      loop: "{{ hpegl_group_setting_uris }}"
+      register: rg_group_settings
+
+    - name: Display output of all settings in a group
+      ansible.builtin.debug:
+        msg: "{{ rg_group_settings }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Find the settings uri for OS job template
+      ansible.builtin.set_fact:
+        hpegl_os_settings_conf: "{{ item.json }}"
+      when:
+        - item.json.category is defined
+        - item.json.category == "OS"
+      loop: "{{ rg_group_settings.results }}"
+
+    - name: Print OS settings in a group
+      ansible.builtin.debug:
+        msg: "{{ hpegl_os_settings_conf }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Fail if OS settings is not present
+      ansible.builtin.assert:
+        that:
+          - hpegl_os_settings_conf is defined
+          - hpegl_os_settings_conf != ''
+        fail_msg: "Unable to find OS settings"
+
+    - name: Patch with new OS image
+      ansible.builtin.uri:
+        url: "{{ hpegl_com_region_url }}{{ hpegl_os_settings_conf.resourceUri }}"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ hpegl_auth_token }}"
+          Content-Type: application/merge-patch+json
+        body:
+          name: "{{ hpegl_os_settings_conf.name }}"
+          description: "{{ hpegl_os_settings_conf.description }}"
+          settings:
+            DEFAULT:
+              mediaUrl: "{{ iso_local_image_path }}"
+              osType: "{{ iso_os_type | default('CUSTOM') }}"
+        body_format: json
+        return_content: true
+        status_code: 200
+      register: rg_patch_os_image
+
+    - name: Output of patch operation
+      ansible.builtin.debug:
+        msg: "{{ rg_patch_os_image }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Wait to sync Compute Ops operations
+      ansible.builtin.pause:
+        seconds: "{{ wait_for_hpecom_sync | default(5) }}"
