@@ -11,6 +11,23 @@
 
     # Compute Ops - Update group image
     # TODO: Create OS settings if not present in group
+    #
+    # Template Id is hardcoded for COM deployment
+    # https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops-mgmt/public/openapi/compute-ops-mgmt-latest/operation/create_v1_job/
+    - name: Prepare body for launching jobs
+      ansible.builtin.set_fact:
+        run_job_body: |
+          {
+            "jobTemplate": "e2952628-2629-4088-93db-91742304ef0c",
+            "resourceType": "compute-ops/group",
+            "resourceId": "{{ hpegl_group_id }}",
+            "jobParams": {
+              "devices": "{{ hpegl_server_ids }}",
+              "parallel": "{{ parallel_os_install | default(true) }}",
+              "stopOnFailure": "{{ stop_on_failure | default(false) }}",
+              "osCompletionTimeoutMin": {{ wait_mins_for_os | default(60) | int }}
+          }
+
     # Launch OS installation
     - name: Initiate OS deployment on servers in group
       ansible.builtin.uri:
@@ -18,18 +35,7 @@
         method: POST
         headers:
           Authorization: "Bearer {{ hpegl_auth_token }}"
-        body:
-          # This template Id is for COM OS deployment
-          # https://developer.greenlake.hpe.com/docs/greenlake/services/compute-ops-mgmt/public/openapi/compute-ops-mgmt-latest/operation/create_v1_job/
-          jobTemplate: "e2952628-2629-4088-93db-91742304ef0c"
-          resourceType: "compute-ops/group"
-          resourceId: "{{ hpegl_group_id }}"
-          jobParams:
-            devices: "{{ hpegl_server_ids }}"
-            parallel: "{{ parallel_os_install | default(true) }}"
-            stopOnFailure: "{{ stop_on_failure | default(false) }}"
-            # minimum wait time in COM is 60 minutes
-            osCompletionTimeoutMin: "{{ wait_mins_for_os | default(60) | int }}"
+        body: "{{ run_job_body }}"
         body_format: json
         return_content: true
         status_code: [200, 201, 202]
