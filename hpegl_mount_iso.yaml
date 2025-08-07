@@ -7,7 +7,7 @@
         that:
           - hpegl_auth_token is defined and hpegl_auth_token != ''
           - hpegl_group_id is defined and hpegl_group_id != ''
-          - hpegl_server_ids is defined and hpegl_server_ids|list > 0
+          - hpegl_server_ids is defined and hpegl_server_ids|length > 0
 
     # Compute Ops - Update group image
     # TODO: Create OS settings if not present in group
