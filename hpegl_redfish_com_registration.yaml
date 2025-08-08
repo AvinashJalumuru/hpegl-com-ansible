@@ -1,0 +1,90 @@
+- name: Enable HPE Cloud Connect on iLO using Redfish API
+  hosts: all
+  gather_facts: false
+  connection: local
+  vars:
+    redfish_com_reg_uri: "/redfish/v1/Managers/1/Actions/Oem/Hpe/HpeiLO.EnableCloudConnect"
+  tasks:
+    # Pre-requisites
+    - name: Check for inputs
+      ansible.builtin.assert:
+        that:
+          - ilo_ip_address is defined and ilo_ip_address != ""
+          - ilo_username is defined and ilo_username != ""
+          - ilo_password is defined and ilo_password != ""
+          - hpegl_com_activation_key is defined and hpegl_com_activation_key != ""
+        fail_msg: "Required variables are not defined"
+
+    # TODO: Check if server is supported by COM
+
+    # Get Redfish info
+    - name: Get uri manager of redfish
+      ansible.builtin.uri:
+        url: "https://{{ ilo_ip_address }}/redfish/v1/Managers?$expand=."
+        method: GET
+        user: "{{ ilo_username }}"
+        password: "{{ ilo_password }}"
+        headers:
+          Content-Type: "application/json"
+        return_content: true
+        force_basic_auth: true
+        validate_certs: "{{ validate_certs | default(false) }}"
+        status_code: 200
+      register: rg_redfish_manager
+
+    - name: Gather facts from Redfish Manager
+      ansible.builtin.set_fact:
+        cloud_connect_state: "{{ rg_redfish_manager.json.Members.0.Oem.Hpe.CloudConnect }}"
+        redfish_connect_uri: "{{ rg_redfish_manager.json.Members.0.Oem.Hpe.Actions['#HpeiLO.EnableCloudConnect']['target'] }}"
+
+    - name: Print Cloud connect status
+      ansible.builtin.debug:
+        msg: "{{ cloud_connect_state.CloudConnectStatus }}"
+      when: enable_debug is defined and enable_debug
+
+    - name: Initial HPE Compute Ops Manager registration
+      when:
+        - cloud_connect_state.CloudConnectStatus is defined
+        - cloud_connect_state.CloudConnectStatus in ["NotEnabled", "NotConnected", "ConnectionFailed"]
+      block:
+        - name: Register to Compute Ops using activation key
+          ansible.builtin.uri:
+            url: "https://{{ ilo_ip_address }}{{ redfish_connect_uri }}"
+            method: POST
+            user: "{{ ilo_username }}"
+            password: "{{ ilo_password }}"
+            headers:
+              Content-Type: "application/json"
+            body:
+              ActivationKey: "{{ hpegl_com_activation_key }}"
+            body_format: json
+            return_content: true
+            force_basic_auth: true
+            validate_certs: "{{ validate_certs | default(false) }}"
+            status_code: [200, 201, 202]
+          register: rg_com_register
+
+        - name: Status of REST API call
+          ansible.builtin.debug:
+            msg: "{{ rg_com_register }}"
+
+        - name: Wait for registration
+          ansible.builtin.pause:
+            seconds: "{{ wait_secs_com_register | default(30) }}"
+
+        - name: Query redfish manager
+          ansible.builtin.uri:
+            url: "https://{{ ilo_ip_address }}/redfish/v1/Managers?$expand=."
+            method: GET
+            user: "{{ ilo_username }}"
+            password: "{{ ilo_password }}"
+            headers:
+              Content-Type: "application/json"
+            return_content: true
+            force_basic_auth: true
+            validate_certs: "{{ validate_certs | default(false) }}"
+            status_code: 200
+          retries: "{{ hpecom_retry | default(6) }}"
+          delay: "{{ hpecom_delay | default(10) }}"
+          register: rg_redfish_manager_connect
+          until: rg_redfish_manager_connect.json.Members.0.Oem.Hpe.CloudConnect.CloudConnectStatus == "Connected"

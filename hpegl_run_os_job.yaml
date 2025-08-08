@@ -40,7 +40,10 @@
         body_format: json
         return_content: true
         status_code: [200, 201, 202]
+      retries: "{{ hpegl_uri_retry | default(3) }}"
+      delay: "{{ hpegl_uri_delay | default(10) }}"
       register: rg_os_install_list
+      until: rg_os_install_list.status in [200, 201, 202]
 
     - name: Print the status of OS installation
       ansible.builtin.debug:

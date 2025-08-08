@@ -56,7 +56,10 @@
         body_format: json
         return_content: true
         status_code: 200
+      retries: "{{ hpegl_uri_retry | default(3) }}"
+      delay: "{{ hpegl_uri_delay | default(10) }}"
       register: rg_patch_os_image
+      until: rg_patch_os_image.status == 200
 
     - name: Output of patch operation
       ansible.builtin.debug:
@@ -65,4 +68,4 @@
 
     - name: Wait to sync Compute Ops operations
       ansible.builtin.pause:
-        seconds: "{{ wait_for_hpecom_sync | default(5) }}"
+        seconds: "{{ wait_for_com_sync | default(5) }}"
